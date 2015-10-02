@@ -19,6 +19,8 @@
 #import "NSValue+OCMAdditions.h"
 #import "OCMFunctionsPrivate.h"
 
+#define OCMSetDefaultArgument(_type, _inv, _at) ({ _type _v = 0; [_inv setArgument:&_v atIndex:_at]; break; })
+
 @implementation OCMBlockArgCaller
 
 - (instancetype)initWithBlockArguments:(NSArray *)someArgs
@@ -59,25 +61,32 @@
         
         if((arg == nil) || [arg isKindOfClass:[NSNull class]])
         {
-            if(typeEncoding[0] == '^')
+            
+            switch(typeEncoding[0])
             {
-                void *nullPtr = NULL;
-                [inv setArgument:&nullPtr atIndex:j];
+                case '@':
+                {
+                    id nilObj = nil;
+                    [inv setArgument:&nilObj atIndex:j];
+                    break;
+                }
+                case '^': OCMSetDefaultArgument(void *, inv, j);
+                case 'c': OCMSetDefaultArgument(char, inv, j);
+                case 'C': OCMSetDefaultArgument(unsigned char, inv, j);
+                case 'B': OCMSetDefaultArgument(bool, inv, j);
+                case 's': OCMSetDefaultArgument(short, inv, j);
+                case 'S': OCMSetDefaultArgument(unsigned short, inv, j);
+                case 'i': OCMSetDefaultArgument(int, inv, j);
+                case 'I': OCMSetDefaultArgument(unsigned int, inv, j);
+                case 'l': OCMSetDefaultArgument(long, inv, j);
+                case 'L': OCMSetDefaultArgument(unsigned long, inv, j);
+                case 'q': OCMSetDefaultArgument(long long, inv, j);
+                case 'Q': OCMSetDefaultArgument(unsigned long long, inv, j);
+                case 'f': OCMSetDefaultArgument(float, inv, j);
+                case 'd': OCMSetDefaultArgument(double, inv, j);
+                default: [NSException raise:NSInvalidArgumentException format:@"Unable to create default value for type %s. All arguments must be specified for this block.", typeEncoding];
             }
-            else if(typeEncoding[0] == '@')
-            {
-                id nilObj =  nil;
-                [inv setArgument:&nilObj atIndex:j];
-            }
-            else if(OCMNumberTypeForObjCType(typeEncoding))
-            {
-                NSUInteger zero = 0;
-                [inv setArgument:&zero atIndex:j];
-            }
-            else
-            {
-                [NSException raise:NSInvalidArgumentException format:@"Unable to create default value for type %s. All arguments must be specified for this block.", typeEncoding];
-            }
+
         }
         else if (typeEncoding[0] == '@')
         {
@@ -100,7 +109,8 @@
 
                 if(!OCMNumberTypeForObjCType(valEncoding))
                     [NSException raise:NSInvalidArgumentException format:@"Argument at %lu must be a number.", (long unsigned)i];
-                [arg getBytes:argBuffer objCType:typeEncoding];
+                if(![arg getBytes:argBuffer objCType:typeEncoding])
+                    [NSException raise:NSInvalidArgumentException format:@"Could not loosely convert from %s to %s at %lu.", valEncoding, typeEncoding, (long unsigned)i];
             }
             else
             {

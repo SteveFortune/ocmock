@@ -16,6 +16,7 @@
 
 #import "OCMBlockArgCaller.h"
 #import "NSMethodSignature+OCMAdditions.h"
+#import "NSValue+OCMAdditions.h"
 #import "OCMFunctionsPrivate.h"
 
 @implementation OCMBlockArgCaller
@@ -88,21 +89,35 @@
                 [NSException raise:NSInvalidArgumentException format:@"Argument at index %lu should be boxed in NSValue.", (long unsigned)i];
             
             char const *valEncoding = [arg objCType];
-            
-            /// @note Here we allow any data pointer to be passed as a void pointer and
-            /// any numberical types to be passed as arguments to the block.
-            BOOL takesVoidPtr = !strcmp(typeEncoding, "^v") && valEncoding[0] == '^';
-            BOOL takesNumber = OCMNumberTypeForObjCType(typeEncoding) && OCMNumberTypeForObjCType(valEncoding);
-            
-            if(!takesVoidPtr && !takesNumber && !OCMEqualTypesAllowingOpaqueStructs(typeEncoding, valEncoding))
-                 [NSException raise:NSInvalidArgumentException format:@"Argument type mismatch; Block requires %s but argument provided is %s", typeEncoding, valEncoding];
-            
             NSUInteger argSize;
             NSGetSizeAndAlignment(typeEncoding, &argSize, NULL);
             void *argBuffer = malloc(argSize);
-            [arg getValue:argBuffer];
+
+            if(OCMNumberTypeForObjCType(typeEncoding))
+            {
+                /// @note If the argument is numerical also check that the value is a number;
+                /// if so we allow approximate or lossy conversions using `- (BOOL)getBytes:objCType:`.
+
+                if(!OCMNumberTypeForObjCType(valEncoding))
+                    [NSException raise:NSInvalidArgumentException format:@"Argument at %lu must be a number.", (long unsigned)i];
+                [arg getBytes:argBuffer objCType:typeEncoding];
+            }
+            else
+            {
+                /// @note Here we allow any data pointer to be passed as a void pointer, otherwise
+                /// the types must match entirely.
+                
+                BOOL takesVoidPtr = !strcmp(typeEncoding, "^v") && valEncoding[0] == '^';
+                if(!takesVoidPtr && !OCMEqualTypesAllowingOpaqueStructs(typeEncoding, valEncoding))
+                    [NSException raise:NSInvalidArgumentException format:@"Argument type mismatch; Block requires %s but argument provided is %s", typeEncoding, valEncoding];
+                
+                [arg getValue:argBuffer];
+
+            }
+            
             [inv setArgument:argBuffer atIndex:j];
             free(argBuffer);
+            
         }
     }
     

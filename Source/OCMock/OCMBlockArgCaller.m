@@ -19,9 +19,21 @@
 #import "NSValue+OCMAdditions.h"
 #import "OCMFunctionsPrivate.h"
 
+/**
+ 
+ Sets a default argument at the specified index in the invocation object.
+ Creates a variable of the type required by `targetType` and assigns as follows:
+ 
+ - If its a pointer or numerical value, assigns to 0
+ - If its an object, assigns to nil
+ - Else throws an NSInvalidArgumentException
+ 
+ @see NSValue+OCMAdditions, - (BOOL)getBytes:(void *)outputBuf objCType:(const char *)targetType
+ 
+ */
 static void OCMSetDefaultArgument(NSInvocation *inv, const char *typeEncoding, NSUInteger at)
 {
-#define SET_DEFAULT(_type) ({ _type _v = 0; [inv setArgument:&_v atIndex:at]; break; })
+#define SET_DEFAULT(_type) ({ _type _v = (_type)0; [inv setArgument:&_v atIndex:at]; break; })
     switch(typeEncoding[0])
     {
         case '@':
@@ -107,8 +119,8 @@ static void OCMSetDefaultArgument(NSInvocation *inv, const char *typeEncoding, N
 
             if(OCMNumberTypeForObjCType(typeEncoding))
             {
-                /// @note If the argument is numerical also check that the value is a number;
-                /// if so we allow approximate or lossy conversions using `- (BOOL)getBytes:objCType:`.
+                /// @note If the argument is numerical, check that the value is both a number
+                /// _and_ that a convertion to the required type isn't lossy, using `- (BOOL)getBytes:objCType:`.
 
                 if(!OCMNumberTypeForObjCType(valEncoding))
                     [NSException raise:NSInvalidArgumentException format:@"Argument at %lu must be a number.", (long unsigned)i];
